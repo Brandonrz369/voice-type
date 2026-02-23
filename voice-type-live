@@ -1,0 +1,65 @@
+#!/usr/bin/env python3
+"""Live transcription - types text as you speak using local faster-whisper."""
+
+import os
+import time
+import subprocess
+
+os.environ['DISPLAY'] = ':0'
+
+TMPFILE = "/tmp/voice-recording.wav"
+PIDFILE = "/tmp/voice-type.pid"
+LOGFILE = "/tmp/voice-type.log"
+
+def log(msg):
+    with open(LOGFILE, "a") as f:
+        f.write(f"{time.strftime('%c')}: [LIVE] {msg}\n")
+
+def type_text(text):
+    if not text:
+        return
+    # Use ydotool for Wayland
+    subprocess.run(['ydotool', 'type', text])
+
+def transcribe():
+    try:
+        from faster_whisper import WhisperModel
+        model = WhisperModel('base', device='cpu', compute_type='int8')
+        segments, _ = model.transcribe(TMPFILE)
+        return ' '.join(s.text for s in segments).strip()
+    except:
+        return ""
+
+def main():
+    log("Live transcription starting")
+    typed_len = 0
+    time.sleep(2)  # Wait for audio to accumulate
+
+    while os.path.exists(PIDFILE):
+        try:
+            if not os.path.exists(TMPFILE):
+                time.sleep(0.5)
+                continue
+
+            size = os.path.getsize(TMPFILE)
+            if size < 48000:  # Need ~1.5 sec of audio
+                time.sleep(0.5)
+                continue
+
+            text = transcribe()
+            if text and len(text) > typed_len:
+                new_text = text[typed_len:].strip()
+                if new_text:
+                    log(f"Typing: {new_text}")
+                    type_text(new_text + " ")
+                    typed_len = len(text)
+
+            time.sleep(2)
+        except Exception as e:
+            log(f"Error: {e}")
+            time.sleep(1)
+
+    log("Stopped")
+
+if __name__ == "__main__":
+    main()

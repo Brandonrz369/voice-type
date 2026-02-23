@@ -1,0 +1,25 @@
+#!/bin/bash
+# Wrapper for local faster-whisper transcription
+# Requires: pip install faster-whisper
+
+python3 -c "
+from faster_whisper import WhisperModel
+import sys
+
+if len(sys.argv) < 2:
+    print('Usage: whisper-local <audio_file> [model_size]')
+    print('Models: tiny, base, small, medium, large')
+    sys.exit(1)
+
+audio_file = sys.argv[1]
+model_size = sys.argv[2] if len(sys.argv) > 2 else 'base'
+
+print(f'Loading {model_size} model...')
+model = WhisperModel(model_size, device='cpu', compute_type='int8')
+
+print(f'Transcribing {audio_file}...')
+segments, info = model.transcribe(audio_file)
+
+for segment in segments:
+    print(segment.text)
+" "$@"

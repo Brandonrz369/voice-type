@@ -1,0 +1,74 @@
+#!/bin/bash
+# Simple voice typing - laptop mic + Groq cloud Whisper
+# Toggle: first press starts recording, second press stops & transcribes
+
+# Load API key from config
+CONFIG_DIR="${HOME}/voice-type-config"
+CONFIG_FILE="${CONFIG_DIR}/config"
+
+if [ -f "$CONFIG_FILE" ]; then
+    source "$CONFIG_FILE"
+    GROQ_KEY="${GROQ_API_KEY}"
+else
+    notify-send "Voice Type" "Missing config: $CONFIG_FILE" -t 5000
+    exit 1
+fi
+
+if [ -z "$GROQ_KEY" ]; then
+    notify-send "Voice Type" "GROQ_API_KEY not set in $CONFIG_FILE" -t 5000
+    exit 1
+fi
+
+# Ensure ydotoold is running
+if ! pgrep -x "ydotoold" > /dev/null; then
+    if ! which ydotool > /dev/null 2>&1; then
+        notify-send "Voice Type" "ydotool not installed. Run: sudo apt install ydotool" -t 5000
+        exit 1
+    fi
+
+    # Start ydotoold in background
+    sudo ydotoold --socket-path=/tmp/.ydotool_socket --socket-own=$(id -u):$(id -g) --background
+    sleep 1
+fi
+export YDOTOOL_SOCKET="/tmp/.ydotool_socket"
+
+PIDFILE="/tmp/voice-type.pid"
+TMPFILE="/tmp/voice-recording.wav"
+
+# STOP if already recording
+if [ -f "$PIDFILE" ]; then
+    kill $(cat "$PIDFILE") 2>/dev/null
+    rm -f "$PIDFILE"
+    sleep 0.3
+
+    if [ -s "$TMPFILE" ]; then
+        notify-send "Voice Type" "Processing..." -t 1500
+
+        TEXT=$(python3 << PYEOF
+import requests
+with open('$TMPFILE', 'rb') as f:
+    r = requests.post('https://api.groq.com/openai/v1/audio/transcriptions',
+        headers={'Authorization': 'Bearer $GROQ_KEY'},
+        files={'file': ('a.wav', f, 'audio/wav')},
+        data={'model': 'whisper-large-v3', 'language': 'en', 'response_format': 'text'})
+    print(r.text.strip() if r.ok else '')
+PYEOF
+)
+
+        if [ -n "$TEXT" ]; then
+            ydotool type -- "$TEXT"
+            echo "$TEXT" | wl-copy
+            echo "[$(date)] $TEXT" >> /tmp/voice-type-transcripts.log
+            notify-send "Voice Type" "Typed & copied to clipboard" -t 3000
+        else
+            notify-send "Voice Type" "No speech detected" -t 2000
+        fi
+    fi
+    rm -f "$TMPFILE"
+    exit 0
+fi
+
+# START recording with laptop mic
+notify-send "Voice Type" "Recording... Alt+X to stop" -t 2000
+ffmpeg -y -f pulse -i alsa_input.pci-0000_00_1f.3.analog-stereo -ar 16000 -ac 1 "$TMPFILE" </dev/null >/dev/null 2>&1 &
+echo $! > "$PIDFILE"

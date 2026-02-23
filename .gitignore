@@ -1,0 +1,20 @@
+# API keys and config
+voice-type-config/
+config
+.env
+
+# Python
+__pycache__/
+*.pyc
+.whisper-venv/
+
+# Audio files
+*.wav
+*.mp3
+*.ogg
+
+# Logs
+*.log
+
+# Temp files
+*.pid

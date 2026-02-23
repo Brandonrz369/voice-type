@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""AirPods button listener using evdev for reliable detection.
+
+Triggers voice-type on AirPods play/pause button press when no media is playing.
+Requires: pip install evdev
+"""
+
+import subprocess
+import time
+import os
+from pathlib import Path
+
+os.environ['DISPLAY'] = ':0'
+os.environ['DBUS_SESSION_BUS_ADDRESS'] = f"unix:path=/run/user/{os.getuid()}/bus"
+
+LOGFILE = "/tmp/airpods-listener.log"
+DEBOUNCE_MS = 1500
+last_trigger = 0
+
+def log(msg):
+    with open(LOGFILE, "a") as f:
+        f.write(f"{time.strftime('%c')}: {msg}\n")
+    print(msg)
+
+def find_airpods_device():
+    """Find the AirPods AVRCP input device."""
+    try:
+        from evdev import InputDevice, list_devices
+        for path in list_devices():
+            try:
+                dev = InputDevice(path)
+                if 'AirPods' in dev.name and 'AVRCP' in dev.name:
+                    return dev
+            except:
+                continue
+    except Exception as e:
+        log(f"Error finding device: {e}")
+    return None
+
+def is_media_playing():
+    """Check if media is currently playing."""
+    try:
+        result = subprocess.run(['playerctl', 'status'],
+                              capture_output=True, text=True, timeout=2)
+        return result.stdout.strip() == 'Playing'
+    except:
+        return False
+
+def trigger_voice_type():
+    """Trigger the voice-type script."""
+    global last_trigger
+    now = time.time() * 1000
+
+    if now - last_trigger < DEBOUNCE_MS:
+        log("Debounced - too soon after last trigger")
+        return
+
+    if is_media_playing():
+        log("Media playing, ignoring button press")
+        return
+
+    log("Button pressed - triggering voice-type")
+    subprocess.Popen(['/home/brandon/.local/bin/voice-type'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    last_trigger = now
+
+def main():
+    from evdev import ecodes
+
+    log("AirPods listener starting")
+
+    while True:
+        dev = find_airpods_device()
+
+        if dev is None:
+            log("Waiting for AirPods to connect...")
+            time.sleep(3)
+            continue
+
+        log(f"Found AirPods at {dev.path}")
+
+        try:
+            for event in dev.read_loop():
+                # Key press events (type 1, value 1 = press)
+                if event.type == ecodes.EV_KEY and event.value == 1:
+                    # KEY_PLAYCD = 200, KEY_PAUSECD = 201
+                    if event.code in (200, 201):
+                        trigger_voice_type()
+        except OSError as e:
+            log(f"Device disconnected: {e}")
+            time.sleep(1)
+        except Exception as e:
+            log(f"Error: {e}")
+            time.sleep(1)
+
+if __name__ == "__main__":
+    main()
