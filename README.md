@@ -17,8 +17,6 @@ Uses [Groq's](https://groq.com/) cloud Whisper API for fast, accurate transcript
 | `voice-type-live` | Live transcription variant using local faster-whisper (types as you speak) |
 | `voice-type-local.sh` | Original version using local whisper CLI (X11/xdotool) |
 | `whisper-local` | Standalone wrapper for local faster-whisper transcription |
-| `airpods-button-listener` | Triggers voice-type from AirPods play/pause button |
-| `airpods-voice.service` | Systemd user service for the AirPods listener |
 
 ## Setup
 
@@ -52,16 +50,6 @@ In GNOME Settings > Keyboard > Custom Shortcuts, add:
 - **Name:** Voice Type
 - **Command:** `/home/YOUR_USER/.local/bin/voice-type`
 - **Shortcut:** Alt+X
-
-### Optional: AirPods trigger
-
-```bash
-pip install evdev
-cp airpods-button-listener ~/.local/bin/
-chmod +x ~/.local/bin/airpods-button-listener
-cp airpods-voice.service ~/.config/systemd/user/
-systemctl --user enable --now airpods-voice
-```
 
 ### Optional: Local transcription (no API needed)
 
